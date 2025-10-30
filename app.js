@@ -1,10 +1,53 @@
+// ============================================================================
+// FIREBASE CONFIGURATION
+// ============================================================================
+//
+// Replace this with your own Firebase configuration
+// Get it from: https://console.firebase.google.com/
+//
+// Steps:
+// 1. Create project at https://console.firebase.google.com/
+// 2. Click "Add app" → Web (</> icon)
+// 3. Copy the firebaseConfig object
+// 4. Replace the config below
+// 5. Go to "Build" → "Realtime Database" → "Create Database"
+// 6. Choose location and start in "test mode"
+//
+const firebaseConfig = {
+    // REPLACE WITH YOUR FIREBASE CONFIG
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+// Initialize Firebase
+if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+    alert("⚠️ Firebase not configured!\n\nPlease add your Firebase configuration in app.js.\n\nSee README.md for setup instructions.");
+}
+
+let app, database;
+try {
+    app = firebase.initializeApp(firebaseConfig);
+    database = firebase.database();
+} catch (error) {
+    console.error("Firebase initialization error:", error);
+    alert("Firebase configuration error. Please check your config in app.js");
+}
+
+// ============================================================================
+// CONSTANTS & STATE
+// ============================================================================
+
 const fibonacciSequence = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, '?'];
 
 // UI Elements
 const initialScreen = document.getElementById('initialScreen');
 const createScreen = document.getElementById('createScreen');
 const joinScreen = document.getElementById('joinScreen');
-const waitingScreen = document.getElementById('waitingScreen');
 const roomLinkScreen = document.getElementById('roomLinkScreen');
 const pokerRoom = document.getElementById('pokerRoom');
 
@@ -13,56 +56,70 @@ const joinRoomBtn = document.getElementById('joinRoomBtn');
 const backFromCreateBtn = document.getElementById('backFromCreateBtn');
 const backFromJoinBtn = document.getElementById('backFromJoinBtn');
 
-const hostNameInput = document.getElementById('hostNameInput');
-const startHostBtn = document.getElementById('startHostBtn');
+const createNameInput = document.getElementById('createNameInput');
+const createRoomSubmitBtn = document.getElementById('createRoomSubmitBtn');
 
-const peerNameInput = document.getElementById('peerNameInput');
+const joinNameInput = document.getElementById('joinNameInput');
 const roomIdInput = document.getElementById('roomIdInput');
-const joinBtn = document.getElementById('joinBtn');
+const joinRoomSubmitBtn = document.getElementById('joinRoomSubmitBtn');
 
 const roomLinkInput = document.getElementById('roomLinkInput');
 const roomIdDisplay = document.getElementById('roomIdDisplay');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
-const continueAsHostBtn = document.getElementById('continueAsHostBtn');
+const continueToRoomBtn = document.getElementById('continueToRoomBtn');
 
 const cardsContainer = document.getElementById('cardsContainer');
 const participantsList = document.getElementById('participantsList');
 const participantCount = document.getElementById('participantCount');
-const roleIndicator = document.getElementById('roleIndicator');
 const revealBtn = document.getElementById('revealBtn');
 const resetBtn = document.getElementById('resetBtn');
 const resultsSection = document.getElementById('resultsSection');
 const votingResults = document.getElementById('votingResults');
-const connectionStatus = document.getElementById('connectionStatus');
 
 // State
-let peer = null;
-let isHost = false;
-let hostConnection = null;
-let peerConnections = {}; // For host: map of peerId -> connection
-let users = {}; // For host: map of peerId -> user data
-let votes = {}; // For host: map of peerId -> vote
-let votesRevealed = false;
-let myId = null;
-let myName = null;
+let currentRoomId = null;
+let currentUserId = null;
+let currentUserName = null;
 let myVote = null;
+let roomListener = null;
 
-// UI Navigation
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
 function showScreen(screen) {
-    [initialScreen, createScreen, joinScreen, waitingScreen, roomLinkScreen, pokerRoom].forEach(s => {
+    [initialScreen, createScreen, joinScreen, roomLinkScreen, pokerRoom].forEach(s => {
         s.classList.add('hidden');
     });
     screen.classList.remove('hidden');
 }
 
+function generateRoomId() {
+    // Generate a readable 6-character room ID
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed ambiguous chars
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+function generateUserId() {
+    return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// ============================================================================
+// NAVIGATION HANDLERS
+// ============================================================================
+
 createRoomBtn.addEventListener('click', () => {
     showScreen(createScreen);
-    hostNameInput.focus();
+    createNameInput.focus();
 });
 
 joinRoomBtn.addEventListener('click', () => {
     showScreen(joinScreen);
-    peerNameInput.focus();
+    joinNameInput.focus();
 });
 
 backFromCreateBtn.addEventListener('click', () => {
@@ -80,173 +137,99 @@ window.addEventListener('load', () => {
     if (roomId) {
         showScreen(joinScreen);
         roomIdInput.value = roomId;
-        peerNameInput.focus();
+        joinNameInput.focus();
     }
 });
 
-// Host: Create Room
-startHostBtn.addEventListener('click', () => {
-    const name = hostNameInput.value.trim();
-    if (!name) return;
+// ============================================================================
+// ROOM MANAGEMENT
+// ============================================================================
 
-    myName = name;
-    isHost = true;
+// Create Room
+createRoomSubmitBtn.addEventListener('click', async () => {
+    const name = createNameInput.value.trim();
+    if (!name) {
+        alert('Please enter your name');
+        return;
+    }
 
-    showScreen(waitingScreen);
+    currentUserName = name;
+    currentUserId = generateUserId();
+    currentRoomId = generateRoomId();
 
-    // Set timeout for connection
-    const connectionTimeout = setTimeout(() => {
-        if (peer && !myId) {
-            peer.destroy();
-            alert('Connection timed out. The PeerJS server might be slow or unavailable. Please try again.');
-            showScreen(createScreen);
-        }
-    }, 15000); // 15 second timeout
+    try {
+        // Create room in Firebase
+        await database.ref(`rooms/${currentRoomId}`).set({
+            createdAt: Date.now(),
+            revealed: false
+        });
 
-    // Create peer with PeerJS cloud server with config
-    peer = new Peer({
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:global.stun.twilio.com:3478' }
-            ]
-        }
-    });
+        // Add self to room
+        await database.ref(`rooms/${currentRoomId}/users/${currentUserId}`).set({
+            name: currentUserName,
+            vote: null,
+            joinedAt: Date.now()
+        });
 
-    peer.on('open', (id) => {
-        clearTimeout(connectionTimeout);
-        myId = id;
-        console.log('Host peer created with ID:', id);
-
-        // Add self to users
-        users[id] = { id, name, vote: null };
-        votes[id] = null;
-
-        // Generate room link
-        const roomLink = `${window.location.origin}${window.location.pathname}?room=${id}`;
+        // Show room link screen
+        const roomLink = `${window.location.origin}${window.location.pathname}?room=${currentRoomId}`;
         roomLinkInput.value = roomLink;
-        roomIdDisplay.textContent = id;
+        roomIdDisplay.textContent = currentRoomId;
 
         showScreen(roomLinkScreen);
-    });
-
-    peer.on('connection', (conn) => {
-        console.log('Peer connecting:', conn.peer);
-        handlePeerConnection(conn);
-    });
-
-    peer.on('error', (err) => {
-        clearTimeout(connectionTimeout);
-        console.error('Peer error:', err);
-        let errorMsg = 'Connection error. ';
-
-        if (err.type === 'network') {
-            errorMsg += 'Network issue detected. Check your internet connection.';
-        } else if (err.type === 'server-error') {
-            errorMsg += 'PeerJS server unavailable. Please try again in a moment.';
-        } else if (err.type === 'browser-incompatible') {
-            errorMsg += 'Your browser does not support WebRTC.';
-        } else {
-            errorMsg += `Error: ${err.type}`;
-        }
-
-        alert(errorMsg);
-        showScreen(createScreen);
-    });
-
-    peer.on('disconnected', () => {
-        console.log('Peer disconnected, attempting to reconnect...');
-        if (!peer.destroyed) {
-            peer.reconnect();
-        }
-    });
+    } catch (error) {
+        console.error('Error creating room:', error);
+        alert('Failed to create room. Please check your Firebase configuration.');
+    }
 });
 
-// Host: Handle incoming peer connections
-function handlePeerConnection(conn) {
-    peerConnections[conn.peer] = conn;
+// Join Room
+joinRoomSubmitBtn.addEventListener('click', async () => {
+    const name = joinNameInput.value.trim();
+    const roomId = roomIdInput.value.trim().toUpperCase();
 
-    conn.on('open', () => {
-        console.log('Connection opened with:', conn.peer);
-    });
-
-    conn.on('data', (data) => {
-        console.log('Received from', conn.peer, ':', data);
-        handleHostMessage(conn, data);
-    });
-
-    conn.on('close', () => {
-        console.log('Peer disconnected:', conn.peer);
-        delete peerConnections[conn.peer];
-        delete users[conn.peer];
-        delete votes[conn.peer];
-        broadcastGameState();
-    });
-
-    conn.on('error', (err) => {
-        console.error('Connection error with', conn.peer, ':', err);
-    });
-}
-
-// Host: Handle messages from peers
-function handleHostMessage(conn, data) {
-    const peerId = conn.peer;
-
-    switch (data.type) {
-        case 'join':
-            users[peerId] = { id: peerId, name: data.name, vote: null };
-            votes[peerId] = null;
-            // Send current game state to new peer
-            conn.send({
-                type: 'gameState',
-                users: Object.values(users),
-                votes: votesRevealed ? votes : null,
-                revealed: votesRevealed
-            });
-            // Broadcast to all peers
-            broadcastGameState();
-            break;
-
-        case 'vote':
-            users[peerId].vote = data.value;
-            votes[peerId] = data.value;
-            broadcastGameState();
-            break;
-
-        case 'reveal':
-            votesRevealed = true;
-            broadcastGameState();
-            break;
-
-        case 'reset':
-            Object.keys(users).forEach(id => {
-                users[id].vote = null;
-                votes[id] = null;
-            });
-            votesRevealed = false;
-            broadcastGameState();
-            break;
+    if (!name) {
+        alert('Please enter your name');
+        return;
     }
-}
 
-// Host: Broadcast game state to all peers
-function broadcastGameState() {
-    const state = {
-        type: 'gameState',
-        users: Object.values(users),
-        votes: votesRevealed ? votes : null,
-        revealed: votesRevealed
-    };
+    if (!roomId) {
+        alert('Please enter a Room ID');
+        return;
+    }
 
-    Object.values(peerConnections).forEach(conn => {
-        if (conn.open) {
-            conn.send(state);
+    currentUserName = name;
+    currentUserId = generateUserId();
+    currentRoomId = roomId;
+
+    try {
+        // Check if room exists
+        const roomSnapshot = await database.ref(`rooms/${currentRoomId}`).once('value');
+
+        if (!roomSnapshot.exists()) {
+            alert('Room not found. Please check the Room ID.');
+            return;
         }
-    });
 
-    // Update own UI
-    updateUI(state);
-}
+        // Add self to room
+        await database.ref(`rooms/${currentRoomId}/users/${currentUserId}`).set({
+            name: currentUserName,
+            vote: null,
+            joinedAt: Date.now()
+        });
+
+        // Go to poker room
+        enterPokerRoom();
+    } catch (error) {
+        console.error('Error joining room:', error);
+        alert('Failed to join room. Please try again.');
+    }
+});
+
+// Continue to room (after creating)
+continueToRoomBtn.addEventListener('click', () => {
+    enterPokerRoom();
+});
 
 // Copy room link
 copyLinkBtn.addEventListener('click', () => {
@@ -258,187 +241,57 @@ copyLinkBtn.addEventListener('click', () => {
     }, 2000);
 });
 
-// Host: Continue to room
-continueAsHostBtn.addEventListener('click', () => {
+// ============================================================================
+// POKER ROOM
+// ============================================================================
+
+function enterPokerRoom() {
     showScreen(pokerRoom);
-    roleIndicator.textContent = 'HOST';
     initializeCards();
-    broadcastGameState();
-});
-
-// Peer: Join Room
-joinBtn.addEventListener('click', () => {
-    const name = peerNameInput.value.trim();
-    const roomId = roomIdInput.value.trim();
-
-    if (!name || !roomId) return;
-
-    myName = name;
-    isHost = false;
-
-    showScreen(waitingScreen);
-    document.querySelector('#waitingScreen .status-text').textContent = 'Connecting to room...';
-
-    // Set timeout for connection
-    const connectionTimeout = setTimeout(() => {
-        if (peer && !hostConnection?.open) {
-            peer.destroy();
-            alert('Connection timed out. The host might be offline or the Room ID is incorrect. Please check and try again.');
-            showScreen(joinScreen);
-        }
-    }, 20000); // 20 second timeout for joining
-
-    // Create peer with config
-    peer = new Peer({
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:global.stun.twilio.com:3478' }
-            ]
-        }
-    });
-
-    peer.on('open', (id) => {
-        myId = id;
-        console.log('Peer created with ID:', id);
-
-        // Connect to host with timeout
-        hostConnection = peer.connect(roomId, {
-            reliable: true
-        });
-
-        const hostConnectTimeout = setTimeout(() => {
-            if (!hostConnection.open) {
-                clearTimeout(connectionTimeout);
-                peer.destroy();
-                alert('Could not connect to host. The Room ID may be incorrect or the host is offline.');
-                showScreen(joinScreen);
-            }
-        }, 15000);
-
-        hostConnection.on('open', () => {
-            clearTimeout(connectionTimeout);
-            clearTimeout(hostConnectTimeout);
-            console.log('Connected to host');
-            connectionStatus.classList.remove('hidden');
-            connectionStatus.classList.add('connected');
-            connectionStatus.querySelector('.status-text').textContent = 'Connected';
-
-            // Send join message
-            hostConnection.send({
-                type: 'join',
-                name: myName
-            });
-
-            showScreen(pokerRoom);
-            roleIndicator.textContent = 'PARTICIPANT';
-            initializeCards();
-        });
-
-        hostConnection.on('data', (data) => {
-            console.log('Received from host:', data);
-            handlePeerMessage(data);
-        });
-
-        hostConnection.on('close', () => {
-            console.log('Disconnected from host');
-            connectionStatus.classList.remove('connected');
-            connectionStatus.classList.add('error');
-            connectionStatus.querySelector('.status-text').textContent = 'Disconnected from host';
-            alert('Connection to host lost. The host may have closed the room.');
-        });
-
-        hostConnection.on('error', (err) => {
-            clearTimeout(connectionTimeout);
-            clearTimeout(hostConnectTimeout);
-            console.error('Connection error:', err);
-            alert(`Failed to connect to room. The Room ID may be incorrect or the host is unavailable.`);
-            showScreen(joinScreen);
-        });
-    });
-
-    peer.on('error', (err) => {
-        clearTimeout(connectionTimeout);
-        console.error('Peer error:', err);
-        let errorMsg = 'Connection error. ';
-
-        if (err.type === 'peer-unavailable') {
-            errorMsg += 'Room not found. Please check the Room ID.';
-        } else if (err.type === 'network') {
-            errorMsg += 'Network issue detected. Check your internet connection.';
-        } else if (err.type === 'server-error') {
-            errorMsg += 'PeerJS server unavailable. Please try again in a moment.';
-        } else {
-            errorMsg += `Error: ${err.type}`;
-        }
-
-        alert(errorMsg);
-        showScreen(joinScreen);
-    });
-
-    peer.on('disconnected', () => {
-        console.log('Peer disconnected, attempting to reconnect...');
-        if (!peer.destroyed) {
-            peer.reconnect();
-        }
-    });
-});
-
-// Peer: Handle messages from host
-function handlePeerMessage(data) {
-    if (data.type === 'gameState') {
-        updateUI(data);
-    }
+    listenToRoomChanges();
+    setupPresence();
 }
 
-// Initialize voting cards
-function initializeCards() {
-    cardsContainer.innerHTML = '';
-    fibonacciSequence.forEach(value => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.textContent = value;
-        card.dataset.value = value;
+function setupPresence() {
+    // Remove user from room when they disconnect
+    const userRef = database.ref(`rooms/${currentRoomId}/users/${currentUserId}`);
 
-        card.addEventListener('click', () => {
-            selectCard(card, value);
-        });
+    userRef.onDisconnect().remove();
 
-        cardsContainer.appendChild(card);
+    // Also clean up old rooms (optional)
+    window.addEventListener('beforeunload', () => {
+        userRef.remove();
     });
 }
 
-// Select a card
-function selectCard(cardElement, value) {
-    document.querySelectorAll('.card').forEach(card => {
-        card.classList.remove('selected');
-    });
+function listenToRoomChanges() {
+    // Listen to all changes in the room
+    roomListener = database.ref(`rooms/${currentRoomId}`).on('value', (snapshot) => {
+        const roomData = snapshot.val();
 
-    cardElement.classList.add('selected');
-    myVote = value;
-
-    if (isHost) {
-        // Host votes directly
-        users[myId].vote = value;
-        votes[myId] = value;
-        broadcastGameState();
-    } else {
-        // Peer sends vote to host
-        if (hostConnection && hostConnection.open) {
-            hostConnection.send({
-                type: 'vote',
-                value: value
-            });
+        if (!roomData) {
+            // Room was deleted
+            alert('Room no longer exists.');
+            leaveRoom();
+            return;
         }
-    }
+
+        updateUI(roomData);
+    });
 }
 
-// Update UI with game state
-function updateUI(data) {
-    const { users: usersList, votes: votesList, revealed } = data;
+function updateUI(roomData) {
+    const users = roomData.users || {};
+    const revealed = roomData.revealed || false;
+    const usersList = Object.keys(users).map(uid => ({
+        id: uid,
+        ...users[uid]
+    }));
 
+    // Update participant count
     participantCount.textContent = `${usersList.length} participant${usersList.length !== 1 ? 's' : ''}`;
 
+    // Update participants list
     participantsList.innerHTML = '';
 
     usersList.forEach(user => {
@@ -452,15 +305,15 @@ function updateUI(data) {
         const nameSpan = document.createElement('span');
         nameSpan.className = 'participant-name';
         nameSpan.textContent = user.name;
-        if (user.id === myId) {
+        if (user.id === currentUserId) {
             nameSpan.textContent += ' (You)';
         }
 
         const voteSpan = document.createElement('span');
 
-        if (revealed && votesList && votesList[user.id] !== null) {
+        if (revealed && user.vote !== null) {
             voteSpan.className = 'participant-vote';
-            voteSpan.textContent = votesList[user.id];
+            voteSpan.textContent = user.vote;
         } else if (user.vote !== null) {
             const statusDot = document.createElement('span');
             statusDot.className = 'vote-status voted';
@@ -476,10 +329,9 @@ function updateUI(data) {
         participantsList.appendChild(participantCard);
     });
 
-    votesRevealed = revealed;
-
+    // Update results
     if (revealed) {
-        showResults(usersList, votesList);
+        showResults(usersList);
     } else {
         resultsSection.classList.add('hidden');
         // Restore selected card if not revealed
@@ -492,8 +344,7 @@ function updateUI(data) {
     }
 }
 
-// Show results
-function showResults(usersList, votesList) {
+function showResults(usersList) {
     resultsSection.classList.remove('hidden');
     votingResults.innerHTML = '';
 
@@ -501,7 +352,7 @@ function showResults(usersList, votesList) {
     const voteValues = [];
 
     usersList.forEach(user => {
-        const vote = votesList[user.id];
+        const vote = user.vote;
         if (vote !== null && vote !== '?') {
             voteValues.push(Number(vote));
             voteCounts[vote] = (voteCounts[vote] || 0) + 1;
@@ -538,7 +389,7 @@ function showResults(usersList, votesList) {
 
             const divider = document.createElement('div');
             divider.className = 'stat-row';
-            divider.style.borderTop = '2px solid #667eea';
+            divider.style.borderTop = '2px solid rgb(200, 184, 255)';
             divider.style.marginTop = '10px';
             divider.style.paddingTop = '10px';
 
@@ -580,35 +431,94 @@ function showResults(usersList, votesList) {
     }
 }
 
+// ============================================================================
+// VOTING
+// ============================================================================
+
+function initializeCards() {
+    cardsContainer.innerHTML = '';
+    fibonacciSequence.forEach(value => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.textContent = value;
+        card.dataset.value = value;
+
+        card.addEventListener('click', () => {
+            selectCard(card, value);
+        });
+
+        cardsContainer.appendChild(card);
+    });
+}
+
+function selectCard(cardElement, value) {
+    document.querySelectorAll('.card').forEach(card => {
+        card.classList.remove('selected');
+    });
+
+    cardElement.classList.add('selected');
+    myVote = value;
+
+    // Update vote in Firebase
+    database.ref(`rooms/${currentRoomId}/users/${currentUserId}/vote`).set(value);
+}
+
 // Reveal votes
 revealBtn.addEventListener('click', () => {
-    if (isHost) {
-        votesRevealed = true;
-        broadcastGameState();
-    } else {
-        if (hostConnection && hostConnection.open) {
-            hostConnection.send({ type: 'reveal' });
-        }
-    }
+    database.ref(`rooms/${currentRoomId}/revealed`).set(true);
 });
 
 // Reset voting
-resetBtn.addEventListener('click', () => {
+resetBtn.addEventListener('click', async () => {
     myVote = null;
     document.querySelectorAll('.card').forEach(card => {
         card.classList.remove('selected');
     });
 
-    if (isHost) {
-        Object.keys(users).forEach(id => {
-            users[id].vote = null;
-            votes[id] = null;
+    try {
+        // Reset all votes and revealed status
+        const updates = {};
+        updates[`rooms/${currentRoomId}/revealed`] = false;
+
+        // Get all users and reset their votes
+        const usersSnapshot = await database.ref(`rooms/${currentRoomId}/users`).once('value');
+        const users = usersSnapshot.val() || {};
+
+        Object.keys(users).forEach(userId => {
+            updates[`rooms/${currentRoomId}/users/${userId}/vote`] = null;
         });
-        votesRevealed = false;
-        broadcastGameState();
-    } else {
-        if (hostConnection && hostConnection.open) {
-            hostConnection.send({ type: 'reset' });
-        }
+
+        await database.ref().update(updates);
+    } catch (error) {
+        console.error('Error resetting votes:', error);
+    }
+});
+
+// ============================================================================
+// CLEANUP
+// ============================================================================
+
+function leaveRoom() {
+    if (roomListener) {
+        database.ref(`rooms/${currentRoomId}`).off('value', roomListener);
+        roomListener = null;
+    }
+
+    if (currentUserId && currentRoomId) {
+        database.ref(`rooms/${currentRoomId}/users/${currentUserId}`).remove();
+    }
+
+    currentRoomId = null;
+    currentUserId = null;
+    currentUserName = null;
+    myVote = null;
+
+    showScreen(initialScreen);
+}
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    if (currentUserId && currentRoomId) {
+        database.ref(`rooms/${currentRoomId}/users/${currentUserId}`).remove();
     }
 });

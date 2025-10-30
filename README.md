@@ -1,187 +1,256 @@
-# Planning Poker - Fibonacci Sequence (P2P)
+# Planning Poker - Fibonacci Sequence
 
-A real-time peer-to-peer planning poker application for agile teams to estimate story points using the Fibonacci sequence. No server required!
+A real-time planning poker application for agile teams to estimate story points using the Fibonacci sequence. Powered by Firebase for reliable, real-time collaboration.
 
-## Features
+## ✨ Features
 
-- **Peer-to-Peer**: Direct browser-to-browser communication using WebRTC
-- **No Server Needed**: Host and join rooms without any backend
+- **Real-time Sync**: Instant updates across all participants via Firebase
 - **Fibonacci Sequence**: 0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, ?
-- **Real-time Updates**: Instant synchronization across all participants
+- **No Host Dependency**: Anyone can close their browser without affecting others
 - **Vote Reveal/Hide**: Control when estimates are shown
 - **Reset Rounds**: Start new voting sessions
 - **Voting Statistics**: Average, range, and distribution
 - **Responsive Design**: Works on mobile and desktop
-- **GitHub Pages Compatible**: Deploy for free on GitHub Pages
+- **GitHub Pages Compatible**: Deploy for free
+- **99.9% Uptime**: Firebase's rock-solid infrastructure
 
-## Tech Stack
+## 🚀 Quick Setup (5 Minutes)
 
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript
-- **P2P Communication**: PeerJS (WebRTC wrapper)
-- **Deployment**: GitHub Pages (or any static host)
+### Step 1: Create Firebase Project
 
-## Quick Start
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Click **"Add project"** or **"Create a project"**
+3. Enter project name (e.g., "planning-poker")
+4. Disable Google Analytics (optional, not needed)
+5. Click **"Create project"**
 
-### Option 1: Use it Live
+### Step 2: Get Firebase Configuration
 
-1. **Host**: Open the app and click "Create Room"
-2. **Share**: Copy the room link and send it to your team
-3. **Join**: Others click the link and enter their names
-4. **Vote**: Everyone selects their estimate
-5. **Reveal**: Click "Reveal Votes" to see results
+1. In your new project, click the **Web icon** (`</>`) to add a web app
+2. Enter app nickname: "Planning Poker Web"
+3. **Don't check** "Firebase Hosting" (we'll use GitHub Pages)
+4. Click **"Register app"**
+5. Copy the `firebaseConfig` object (looks like this):
 
-### Option 2: Local Development
-
-Simply open `index.html` in your browser - no build step required!
-
-Or use a simple HTTP server:
-
-```bash
-# Python 3
-python -m http.server 8000
-
-# Python 2
-python -m SimpleHTTPServer 8000
-
-# Node.js (if you have http-server installed)
-npx http-server -p 8000
+```javascript
+const firebaseConfig = {
+  apiKey: "AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  authDomain: "your-project.firebaseapp.com",
+  databaseURL: "https://your-project-default-rtdb.firebaseio.com",
+  projectId: "your-project",
+  storageBucket: "your-project.appspot.com",
+  messagingSenderId: "123456789012",
+  appId: "1:123456789012:web:xxxxxxxxxxxxxx"
+};
 ```
 
-Then open `http://localhost:8000` in your browser.
+### Step 3: Enable Realtime Database
 
-## How to Use
+1. In Firebase Console, go to **"Build"** → **"Realtime Database"**
+2. Click **"Create Database"**
+3. Choose location (closest to your team)
+4. Start in **"Test mode"** (we'll secure it later)
+5. Click **"Enable"**
 
-### Creating a Room (Host)
+### Step 4: Add Config to Your Code
 
-1. Click **"Create Room"**
-2. Enter your name
-3. Click **"Create & Host"**
-4. Copy the room link or Room ID
-5. Share with your team
-6. Click **"Continue to Room"**
+1. Open `app.js` in your code editor
+2. Find the `firebaseConfig` object at the top (lines 16-24)
+3. Replace it with YOUR config from Step 2
+4. Save the file
 
-**Important**: As the host, keep your browser tab open. If you close it, the room will disconnect for everyone.
+```javascript
+// In app.js, replace this:
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",  // ← Replace this
+    // ... rest of config
+};
 
-### Joining a Room (Participant)
+// With YOUR actual config from Firebase Console
+```
 
-1. Click **"Join Room"**
-2. Enter your name
-3. Paste the Room ID or use the shared link
-4. Click **"Join Room"**
+### Step 5: Deploy to GitHub Pages
+
+1. Commit and push your changes:
+```bash
+git add app.js
+git commit -m "Add Firebase configuration"
+git push
+```
+
+2. Enable GitHub Pages:
+   - Go to repository **Settings** → **Pages**
+   - Source: Select your branch (e.g., `main`)
+   - Folder: `/ (root)`
+   - Click **Save**
+
+3. Your app will be live at: `https://[username].github.io/planning-poker/`
+
+**Done!** 🎉
+
+## 🎮 How to Use
+
+### Creating a Room
+
+1. Open the app
+2. Click **"Create New Room"**
+3. Enter your name
+4. Share the Room ID or link with your team
+
+### Joining a Room
+
+1. Open the app (or click shared link)
+2. Click **"Join Existing Room"**
+3. Enter your name and Room ID
+4. Start voting!
 
 ### Voting
 
 1. Click any Fibonacci card to vote
-2. Your vote is hidden until revealed
-3. Green dot shows who has voted
-4. Click **"Reveal Votes"** to show everyone's estimates
+2. Your vote is hidden until revealed (green dot shows you voted)
+3. Anyone can click **"Reveal Votes"** to show everyone's estimates
+4. View statistics: average, range, distribution
 5. Click **"Reset"** to start a new round
 
-## Deployment to GitHub Pages
+## 🔧 Tech Stack
 
-### Quick Deploy (Easiest)
+- **Frontend**: HTML5, CSS3, Vanilla JavaScript
+- **Backend**: Firebase Realtime Database
+- **Hosting**: GitHub Pages (or any static host)
+- **Real-time**: Firebase WebSocket connections
 
-1. Push this repo to GitHub:
-```bash
-git add .
-git commit -m "Initial commit"
-git push origin main
+## 🔐 Security (Important!)
+
+Your database is currently in **test mode** (open to everyone). For production:
+
+1. Go to **Realtime Database** → **Rules** tab
+2. Replace rules with:
+
+```json
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": true,
+        ".write": true,
+        "$userId": {
+          ".validate": "newData.hasChildren(['name', 'vote'])"
+        }
+      }
+    }
+  }
+}
 ```
 
-2. Go to **Settings** → **Pages** on GitHub
-3. Under **Source**, select branch (e.g., `main`) and folder `/` (root)
-4. Click **Save**
-5. Your app will be live at `https://[username].github.io/[repo-name]/`
+3. Click **"Publish"**
 
-Done! Share the URL with your team.
+This allows anyone to read/write rooms, but validates the data structure. For stricter security, implement Firebase Authentication.
 
-### Alternative: GitHub Actions (Custom Domain)
-
-For custom domains or more control, use GitHub Actions with a deploy workflow.
-
-## How It Works
-
-### Architecture
+## 🏗️ Architecture
 
 ```
-┌─────────────┐
-│   Host      │ ← Creates room, manages state
-│  (Browser)  │ ← Must stay connected
-└──────┬──────┘
-       │
-       ├──── WebRTC P2P ────┐
-       │                    │
-┌──────▼─────┐      ┌──────▼─────┐
-│  Peer 1    │      │  Peer 2    │
-│ (Browser)  │      │ (Browser)  │
-└────────────┘      └────────────┘
+Browser 1 ──┐
+            ├──→ Firebase Realtime Database ←──┐
+Browser 2 ──┘                                   │
+                                                ├── Browser 3
+                                                │
+                                                └── Browser 4
 ```
 
-- **Host**: First person to create the room becomes the host
-- **PeerJS Cloud**: Free TURN/STUN servers for NAT traversal
-- **Direct P2P**: All communication is browser-to-browser
-- **No Database**: State is held in the host's browser
-- **Room Lifespan**: Room exists as long as host keeps tab open
+- All users connect to Firebase
+- Data syncs in real-time
+- No host dependency
+- Works behind firewalls
 
-### Connection Flow
+## 📁 Project Structure
 
-1. Host creates a Peer with unique ID
-2. Peers connect to Host using that ID
-3. WebRTC establishes direct P2P connection
-4. Host broadcasts game state to all peers
-5. Peers send votes/actions to Host
-6. Host updates state and re-broadcasts
+```
+planning-poker/
+├── index.html          # Main HTML structure
+├── style.css           # Styling
+├── app.js              # Firebase + app logic
+├── README.md           # This file
+└── .gitignore          # Git ignore rules
+```
 
-## Limitations
+## 🐛 Troubleshooting
 
-- **Host Dependency**: If host closes their browser, room ends
-- **Connection Success Rate**: ~95% (NAT/firewall issues in ~5% of cases)
-- **Scalability**: Works well for 2-15 participants
-- **No Persistence**: State is lost when host disconnects
+### "Firebase not configured" Alert
 
-## Troubleshooting
+- You haven't added your Firebase config to `app.js`
+- Follow **Step 4** above
 
-### "Failed to connect to room"
-- Check if Room ID is correct
-- Ensure host's browser tab is still open
-- Try creating a new room
+### "Permission denied" Error
 
-### Votes not updating
+- Your database rules are too restrictive
+- Check **Security** section above
+- Make sure database is in "test mode" initially
+
+### Room not found
+
+- Check the Room ID is correct (case-sensitive)
+- Room IDs are 6 characters: A-Z, 2-9 (no 0, 1, I, O)
+
+### Not syncing in real-time
+
 - Check your internet connection
-- Ensure you haven't lost connection to host
-- Check browser console for errors
+- Open browser console (F12) for errors
+- Verify Firebase configuration is correct
 
-### Connection issues behind corporate firewall
-- Some corporate networks block WebRTC
-- Try using a different network or VPN
-- PeerJS uses free STUN/TURN servers which may be blocked
+## 💰 Cost
 
-## Browser Compatibility
+**Completely FREE** for this use case!
 
-Works in all modern browsers:
-- Chrome 56+
-- Firefox 44+
-- Safari 11+
-- Edge 79+
+Firebase Free Tier:
+- **1 GB** stored data (you'll use <1 MB)
+- **10 GB/month** downloads (you'll use <100 MB)
+- **100 simultaneous connections** (perfect for teams)
 
-Requires WebRTC support.
+You won't hit these limits unless you have hundreds of concurrent sessions.
 
-## Privacy & Security
+## 🌟 Advantages Over WebRTC/PeerJS
 
-- **No Server Storage**: All data is in browser memory only
-- **P2P Only**: Data flows directly between browsers
-- **No Analytics**: No tracking or data collection
-- **Ephemeral**: All data is lost when host closes tab
+| Feature | Firebase | WebRTC/PeerJS |
+|---------|----------|---------------|
+| Reliability | ⭐⭐⭐⭐⭐ 99.9% | ⭐⭐⭐ ~95% |
+| Connection Speed | ⭐⭐⭐⭐⭐ Instant | ⭐⭐⭐ 5-15 sec |
+| Firewall Issues | ⭐⭐⭐⭐⭐ Rare | ⭐⭐⭐ Common |
+| Host Dependency | ✅ None | ❌ Required |
+| Setup Complexity | ⭐⭐⭐ Medium | ⭐⭐ Easy |
+| Persistence | ✅ Optional | ❌ None |
 
-## License
+## 📝 License
 
 MIT
 
-## Contributing
+## 🤝 Contributing
 
 Contributions welcome! Please open an issue or pull request.
 
-## Credits
+## ❓ FAQ
 
-- **PeerJS**: Simplified WebRTC wrapper
-- **PeerJS Cloud**: Free STUN/TURN servers
+### Do I need a credit card for Firebase?
+
+No! The free tier doesn't require payment information.
+
+### Can I use a custom domain?
+
+Yes! Deploy to Firebase Hosting or configure GitHub Pages with your domain.
+
+### How long do rooms persist?
+
+Rooms persist until all users leave. Users are automatically removed when they close their browser.
+
+### Can I add authentication?
+
+Yes! Firebase supports Google, Email, and other auth providers. You'd need to modify the code to add auth.
+
+### What if Firebase goes down?
+
+Firebase has 99.9% uptime. If it's down, the app won't work until it's back up. For mission-critical use, consider adding a fallback or running your own backend.
+
+## 📚 Resources
+
+- [Firebase Documentation](https://firebase.google.com/docs)
+- [Firebase Realtime Database Guide](https://firebase.google.com/docs/database/web/start)
+- [GitHub Pages Documentation](https://docs.github.com/en/pages)

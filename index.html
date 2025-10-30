@@ -10,7 +10,7 @@
     <div class="container">
         <header>
             <h1>Planning Poker</h1>
-            <p class="subtitle">Fibonacci Sequence Estimation • Peer-to-Peer</p>
+            <p class="subtitle">Fibonacci Sequence Estimation • Real-time Collaboration</p>
         </header>
 
         <!-- Initial Screen: Create or Join -->
@@ -18,8 +18,8 @@
             <div class="initial-box">
                 <h2>Get Started</h2>
                 <div class="initial-buttons">
-                    <button id="createRoomBtn" class="btn btn-primary">Create Room</button>
-                    <button id="joinRoomBtn" class="btn btn-outline">Join Room</button>
+                    <button id="createRoomBtn" class="btn btn-primary">Create New Room</button>
+                    <button id="joinRoomBtn" class="btn btn-outline">Join Existing Room</button>
                 </div>
             </div>
         </div>
@@ -27,9 +27,9 @@
         <!-- Create Room Screen -->
         <div id="createScreen" class="screen hidden">
             <div class="join-box">
-                <h2>Create Room</h2>
-                <input type="text" id="hostNameInput" placeholder="Enter your name" maxlength="20">
-                <button id="startHostBtn" class="btn btn-primary">Create & Host</button>
+                <h2>Create New Room</h2>
+                <input type="text" id="createNameInput" placeholder="Enter your name" maxlength="20">
+                <button id="createRoomSubmitBtn" class="btn btn-primary">Create Room</button>
                 <button id="backFromCreateBtn" class="btn btn-text">Back</button>
             </div>
         </div>
@@ -38,23 +38,14 @@
         <div id="joinScreen" class="screen hidden">
             <div class="join-box">
                 <h2>Join Room</h2>
-                <input type="text" id="peerNameInput" placeholder="Enter your name" maxlength="20">
+                <input type="text" id="joinNameInput" placeholder="Enter your name" maxlength="20">
                 <input type="text" id="roomIdInput" placeholder="Enter Room ID" maxlength="50">
-                <button id="joinBtn" class="btn btn-primary">Join Room</button>
+                <button id="joinRoomSubmitBtn" class="btn btn-primary">Join Room</button>
                 <button id="backFromJoinBtn" class="btn btn-text">Back</button>
             </div>
         </div>
 
-        <!-- Waiting Screen (Host waiting for room to initialize) -->
-        <div id="waitingScreen" class="screen hidden">
-            <div class="join-box">
-                <div class="loading-spinner"></div>
-                <h2>Setting up room...</h2>
-                <p class="status-text">Initializing peer connection</p>
-            </div>
-        </div>
-
-        <!-- Room Link Screen (Host shares this) -->
+        <!-- Room Link Screen (After creating room) -->
         <div id="roomLinkScreen" class="screen hidden">
             <div class="join-box">
                 <h2>Room Created!</h2>
@@ -70,12 +61,7 @@
                     <span id="roomIdDisplay" class="room-id-value"></span>
                 </div>
 
-                <div class="host-warning">
-                    <span class="warning-icon">⚠️</span>
-                    <p><strong>You are the host.</strong> Keep this tab open! If you close it, everyone will be disconnected.</p>
-                </div>
-
-                <button id="continueAsHostBtn" class="btn btn-primary">Continue to Room</button>
+                <button id="continueToRoomBtn" class="btn btn-primary">Continue to Room</button>
             </div>
         </div>
 
@@ -84,17 +70,11 @@
             <div class="room-header">
                 <div class="room-info">
                     <span id="participantCount" class="participant-count">0 participants</span>
-                    <span id="roleIndicator" class="role-indicator"></span>
                 </div>
                 <div class="room-controls">
                     <button id="revealBtn" class="btn btn-secondary">Reveal Votes</button>
                     <button id="resetBtn" class="btn btn-outline">Reset</button>
                 </div>
-            </div>
-
-            <div id="connectionStatus" class="connection-status hidden">
-                <span class="status-dot"></span>
-                <span class="status-text">Connecting...</span>
             </div>
 
             <div class="participants-section">
@@ -114,8 +94,9 @@
         </div>
     </div>
 
-    <!-- PeerJS Library -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
