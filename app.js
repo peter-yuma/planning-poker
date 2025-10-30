@@ -94,10 +94,27 @@ startHostBtn.addEventListener('click', () => {
 
     showScreen(waitingScreen);
 
-    // Create peer with PeerJS cloud server
-    peer = new Peer();
+    // Set timeout for connection
+    const connectionTimeout = setTimeout(() => {
+        if (peer && !myId) {
+            peer.destroy();
+            alert('Connection timed out. The PeerJS server might be slow or unavailable. Please try again.');
+            showScreen(createScreen);
+        }
+    }, 15000); // 15 second timeout
+
+    // Create peer with PeerJS cloud server with config
+    peer = new Peer({
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ]
+        }
+    });
 
     peer.on('open', (id) => {
+        clearTimeout(connectionTimeout);
         myId = id;
         console.log('Host peer created with ID:', id);
 
@@ -119,9 +136,29 @@ startHostBtn.addEventListener('click', () => {
     });
 
     peer.on('error', (err) => {
+        clearTimeout(connectionTimeout);
         console.error('Peer error:', err);
-        alert(`Connection error: ${err.type}`);
-        showScreen(initialScreen);
+        let errorMsg = 'Connection error. ';
+
+        if (err.type === 'network') {
+            errorMsg += 'Network issue detected. Check your internet connection.';
+        } else if (err.type === 'server-error') {
+            errorMsg += 'PeerJS server unavailable. Please try again in a moment.';
+        } else if (err.type === 'browser-incompatible') {
+            errorMsg += 'Your browser does not support WebRTC.';
+        } else {
+            errorMsg += `Error: ${err.type}`;
+        }
+
+        alert(errorMsg);
+        showScreen(createScreen);
+    });
+
+    peer.on('disconnected', () => {
+        console.log('Peer disconnected, attempting to reconnect...');
+        if (!peer.destroyed) {
+            peer.reconnect();
+        }
     });
 });
 
@@ -242,17 +279,46 @@ joinBtn.addEventListener('click', () => {
     showScreen(waitingScreen);
     document.querySelector('#waitingScreen .status-text').textContent = 'Connecting to room...';
 
-    // Create peer
-    peer = new Peer();
+    // Set timeout for connection
+    const connectionTimeout = setTimeout(() => {
+        if (peer && !hostConnection?.open) {
+            peer.destroy();
+            alert('Connection timed out. The host might be offline or the Room ID is incorrect. Please check and try again.');
+            showScreen(joinScreen);
+        }
+    }, 20000); // 20 second timeout for joining
+
+    // Create peer with config
+    peer = new Peer({
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ]
+        }
+    });
 
     peer.on('open', (id) => {
         myId = id;
         console.log('Peer created with ID:', id);
 
-        // Connect to host
-        hostConnection = peer.connect(roomId);
+        // Connect to host with timeout
+        hostConnection = peer.connect(roomId, {
+            reliable: true
+        });
+
+        const hostConnectTimeout = setTimeout(() => {
+            if (!hostConnection.open) {
+                clearTimeout(connectionTimeout);
+                peer.destroy();
+                alert('Could not connect to host. The Room ID may be incorrect or the host is offline.');
+                showScreen(joinScreen);
+            }
+        }, 15000);
 
         hostConnection.on('open', () => {
+            clearTimeout(connectionTimeout);
+            clearTimeout(hostConnectTimeout);
             console.log('Connected to host');
             connectionStatus.classList.remove('hidden');
             connectionStatus.classList.add('connected');
@@ -283,16 +349,38 @@ joinBtn.addEventListener('click', () => {
         });
 
         hostConnection.on('error', (err) => {
+            clearTimeout(connectionTimeout);
+            clearTimeout(hostConnectTimeout);
             console.error('Connection error:', err);
-            alert(`Failed to connect to room: ${err.type}`);
+            alert(`Failed to connect to room. The Room ID may be incorrect or the host is unavailable.`);
             showScreen(joinScreen);
         });
     });
 
     peer.on('error', (err) => {
+        clearTimeout(connectionTimeout);
         console.error('Peer error:', err);
-        alert(`Connection error: ${err.type}. Please check the Room ID.`);
+        let errorMsg = 'Connection error. ';
+
+        if (err.type === 'peer-unavailable') {
+            errorMsg += 'Room not found. Please check the Room ID.';
+        } else if (err.type === 'network') {
+            errorMsg += 'Network issue detected. Check your internet connection.';
+        } else if (err.type === 'server-error') {
+            errorMsg += 'PeerJS server unavailable. Please try again in a moment.';
+        } else {
+            errorMsg += `Error: ${err.type}`;
+        }
+
+        alert(errorMsg);
         showScreen(joinScreen);
+    });
+
+    peer.on('disconnected', () => {
+        console.log('Peer disconnected, attempting to reconnect...');
+        if (!peer.destroyed) {
+            peer.reconnect();
+        }
     });
 });
 
